@@ -7,6 +7,7 @@ import com.stock.treading.repository.UserRepository;
 import com.stock.treading.response.AuthResponse;
 import com.stock.treading.service.AuthService;
 import com.stock.treading.service.CustomUserDetailsService;
+import com.stock.treading.service.EmailService;
 import com.stock.treading.service.TwoFactorOtpService;
 import com.stock.treading.utils.OtpUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -18,10 +19,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/auth")
@@ -39,6 +37,9 @@ public class AuthController {
 
     @Autowired
     private TwoFactorOtpService twoFactorOtpService;
+
+    @Autowired
+    private EmailService emailService;
 
     @PostMapping("/sign-up")
     public ResponseEntity<AuthResponse>  register(@RequestBody User user){
@@ -97,6 +98,8 @@ public class AuthController {
                 }
                 TwoFactorOtp newTwoFactorOtp = twoFactorOtpService.createTwoFactorOtp(authUser,otp,jwt);
 
+                emailService.sendVerificationOtpEmail(username,otp);
+
                 res.setSession(newTwoFactorOtp.getId());
                 return new ResponseEntity<>(res,HttpStatus.ACCEPTED);
             }
@@ -109,7 +112,6 @@ public class AuthController {
             return new ResponseEntity<>(res, HttpStatus.FOUND);
         }catch (Exception e){
 
-//            log.error(String.valueOf(e));
             return  new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
 
@@ -129,4 +131,22 @@ public class AuthController {
 
         return new UsernamePasswordAuthenticationToken(userDetails,password,userDetails.getAuthorities());
     }
+
+
+    public  ResponseEntity<AuthResponse> verifySigninOtp(@PathVariable String otp,@RequestParam String id) throws Exception {
+
+        TwoFactorOtp twoFactorOtp = twoFactorOtpService.findById(id);
+
+        if (twoFactorOtpService.verifyTwoFactorOtp(twoFactorOtp,otp)){
+            AuthResponse res = new AuthResponse();
+            res.setMessage("Two factor authetication verified");
+            res.setTwoFactorAuthEnabled(true);
+            res.setJwt(twoFactorOtp.getJwt());
+
+            return new ResponseEntity<>(res,HttpStatus.OK);
+        }
+        throw  new Exception("invalid otp");
+
+    }
+
 }
